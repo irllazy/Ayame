@@ -1,4 +1,3 @@
-cat > README.md << 'EOF'
 # 🤖 Ayame WhatsApp Bot
 
 A powerful WhatsApp bot with owner-only controls, group management, and advanced features.
