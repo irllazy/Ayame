@@ -8,11 +8,7 @@ export function formatPhoneNumber(number) {
 export function isOwner(number, ownerNumber) {
     const formattedNumber = formatPhoneNumber(number);
     const formattedOwner = formatPhoneNumber(ownerNumber);
-    return formattedNumber === formattedOwner || 
-           formattedNumber.includes(formattedOwner) || 
-           formattedOwner.includes(formattedNumber) ||
-           formattedNumber.endsWith(formattedOwner) ||
-           formattedOwner.endsWith(formattedNumber);
+    return formattedNumber === formattedOwner;
 }
 
 export function getSenderNumber(msg, ownerNumber) {
