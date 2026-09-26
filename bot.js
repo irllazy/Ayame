@@ -10,6 +10,50 @@ import { ownerCommands } from './commands/owner.js';
 import { adminCommands } from './commands/admin.js';
 import { groupCommands } from './commands/group.js';
 import { utilityCommands } from './commands/utility.js';
+import { generalCommands } from './commands/general.js';
+import { formatPhoneNumber, isOwner, getSenderNumber, getTime, getDate } from './utils/helpers.js';
+import fs from 'fs';
+import path from 'path';
+
+// Configuration
+let OWNER_NUMBER = '2347073792765';
+let PREFIX = ''; // Empty prefix means no prefix needed
+let BOT_NAME = 'Ayame';
+let VERSION = '1.0.0';
+
+// Sudo users list
+const sudoUsers = new Set();
+
+// Bot Info
+const botInfo = {
+    name: BOT_NAME,
+    ownerNumber: OWNER_NUMBER,
+    prefix: PREFIX,
+    version: VERSION,
+    alwaysOnline: false,
+    autoStatusView: false,
+    autoBio: false,
+    autoRead: {
+        dm: false,
+        group: false
+    },
+    antiSpam: false,
+    time: getTime(),
+    date: getDate(),
+    status: '🤖 Ayame Bot | Online',
+ makeWASocket, { 
+    useMultiFileAuthState, 
+    DisconnectReason, 
+    fetchLatestBaileysVersion,
+    Browsers
+} from '@whiskeysockets/baileys';
+import pino from 'pino';
+import readline from 'readline';
+import { ownerCommands } from './commands/owner.js';
+import { adminCommands } from './commands/admin.js';
+import { groupCommands } from './commands/group.js';
+import { utilityCommands } from './commands/utility.js';
+import { generalCommands } from './commands/general.js';
 import { formatPhoneNumber, isOwner, getSenderNumber, getTime, getDate } from './utils/helpers.js';
 import fs from 'fs';
 import path from 'path';
@@ -48,7 +92,6 @@ const botInfo = {
 };
 
 // Data storage
-const bannedUsers = new Set();
 const mutedGroups = new Set();
 const antiLinkGroups = new Set();
 const warnings = new Map();
@@ -144,27 +187,7 @@ async function connectToWhatsApp() {
             return;
         }
 
-        // Check if banned user sent message in group
-        if (msg.key.remoteJid.endsWith('@g.us') && bannedUsers.has(senderJid)) {
-            const bannedNumber = senderJid.split('@')[0];
-            
-            // Delete their message
-            await sock.sendMessage(msg.key.remoteJid, { delete: msg.key });
-            
-            // Send "You Fool!" message
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `You Fool! @${bannedNumber}`,
-                mentions: [senderJid]
-            });
-            
-            // Remove them from group
-            await sock.groupParticipantsUpdate(msg.key.remoteJid, [senderJid], 'remove');
-            
-            console.log(`🚫 Removed banned user ${bannedNumber} from group`);
-            return;
-        }
-
-        // Anti-link check - FIXED
+        // Anti-link check
         if (msg.key.remoteJid.endsWith('@g.us') && antiLinkGroups.has(msg.key.remoteJid)) {
             const messageContent = msg.message.conversation || 
                                   msg.message.extendedTextMessage?.text || 
@@ -224,15 +247,6 @@ async function connectToWhatsApp() {
             return;
         }
 
-        // Check AFK status (for anyone messaging the owner)
-        if (botInfo.afk.enabled && !msg.key.fromMe) {
-            const afkMessage = `😴 *${BOT_NAME} is AFK*\n\n` +
-                             `📝 *Reason:* ${botInfo.afk.reason || 'No reason provided'}\n` +
-                             `⏰ *Since:* ${botInfo.afk.since?.toLocaleString() || 'Unknown'}\n\n` +
-                             `I'll respond when I'm back!`;
-            await sock.sendMessage(msg.key.remoteJid, { text: afkMessage });
-        }
-
         // Extract message content
         const messageContent = msg.message.conversation || 
                               msg.message.extendedTextMessage?.text || 
@@ -276,13 +290,16 @@ async function connectToWhatsApp() {
             await ownerCommands[command](sock, msg, botInfo, sudoUsers, isFromOwner);
             commandExecuted = true;
         } else if (adminCommands[command]) {
-            await adminCommands[command](sock, msg, bannedUsers, mutedGroups, antiLinkGroups, warnings);
+            await adminCommands[command](sock, msg, { isFromOwner }, mutedGroups, antiLinkGroups, warnings, args);
             commandExecuted = true;
         } else if (groupCommands[command]) {
             await groupCommands[command](sock, msg);
             commandExecuted = true;
+        } else if (generalCommands[command]) {
+            await generalCommands[command](sock, msg, botInfo);
+            commandExecuted = true;
         } else if (utilityCommands[command]) {
-            await utilityCommands[command](sock, msg, botInfo, blockedUsers, bannedUsers, args);
+            await utilityCommands[command](sock, msg, botInfo, blockedUsers, args);
             commandExecuted = true;
         } else if (command === 'menu' || command === 'allmenu') {
             await sendMenu(sock, msg, botInfo);
@@ -355,7 +372,6 @@ async function sendMenu(sock, msg, botInfo) {
                     `┃ ▸ autoread\n` +
                     `┃ ▸ setprefix\n` +
                     `┃ ▸ setstatus\n` +
-                    `┃ ▸ afk\n` +
                     `┃ ▸ block\n` +
                     `┃ ▸ unblock\n` +
                     `┃ ▸ leave\n` +
@@ -369,9 +385,6 @@ async function sendMenu(sock, msg, botInfo) {
                     `┃ ▸ kick\n` +
                     `┃ ▸ add\n` +
                     `┃ ▸ remove\n` +
-                    `┃ ▸ ban\n` +
-                    `┃ ▸ unban\n` +
-                    `┃ ▸ banned\n` +
                     `┃ ▸ mute\n` +
                     `┃ ▸ unmute\n` +
                     `┃ ▸ warn\n` +
@@ -415,7 +428,6 @@ async function sendHelp(sock, msg, botInfo) {
                     `• autoread - Auto read messages\n` +
                     `• setprefix - Change command prefix\n` +
                     `• setstatus - Set bot status\n` +
-                    `• afk - Set AFK mode\n` +
                     `• block - Block user\n` +
                     `• unblock - Unblock user\n` +
                     `• leave - Leave group\n` +
@@ -429,9 +441,6 @@ async function sendHelp(sock, msg, botInfo) {
                     `• kick - Remove member\n` +
                     `• add - Add member\n` +
                     `• remove - Remove member\n` +
-                    `• ban - Ban member\n` +
-                    `• unban - Unban member\n` +
-                    `• banned - List banned users\n` +
                     `• mute - Mute group\n` +
                     `• unmute - Unmute group\n` +
                     `• warn - Warn member\n` +
