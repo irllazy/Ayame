@@ -84,11 +84,6 @@ const botInfo = {
     time: getTime(),
     date: getDate(),
     status: '🤖 Ayame Bot | Online',
-    afk: {
-        enabled: false,
-        reason: '',
-        since: null
-    }
 };
 
 // Data storage
