@@ -11,48 +11,28 @@ export const utilityCommands = {
         }
     },
 
-    block: async (sock, msg, botInfo, blockedUsers, bannedUsers, args) => {
+    block: async (sock, msg, botInfo, blockedUsers, args) => {
         const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
         const number = args[0];
-        
-        if (mentioned.length > 0) {
-            for (const user of mentioned) {
-                const userNumber = formatPhoneNumber(user.split('@')[0]);
-                blockedUsers.add(userNumber);
-                console.log(`Blocked user: ${userNumber}`);
-            }
-            const mentionedNumbers = mentioned.map(m => m.split('@')[0]).join(', ');
-            await sock.sendMessage(msg.key.remoteJid, { text: `🚫 Blocked: ${mentionedNumbers}` });
-        } else if (number) {
-            const cleanNumber = formatPhoneNumber(number);
-            blockedUsers.add(cleanNumber);
-            console.log(`Blocked number: ${cleanNumber}`);
-            await sock.sendMessage(msg.key.remoteJid, { text: `🚫 Blocked: ${cleanNumber}` });
-        } else {
+        const users = mentioned.length ? mentioned.map(user => user.split('@')[0]) : number ? [formatPhoneNumber(number)] : [];
+        if (!users.length) {
             await sock.sendMessage(msg.key.remoteJid, { text: '❌ Usage: block @user or block [number]' });
+            return;
         }
+        for (const user of users) blockedUsers.add(formatPhoneNumber(user));
+        await sock.sendMessage(msg.key.remoteJid, { text: `🚫 Blocked: ${users.join(', ')}` });
     },
 
-    unblock: async (sock, msg, botInfo, blockedUsers, bannedUsers, args) => {
+    unblock: async (sock, msg, botInfo, blockedUsers, args) => {
         const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
         const number = args[0];
-        
-        if (mentioned.length > 0) {
-            for (const user of mentioned) {
-                const userNumber = formatPhoneNumber(user.split('@')[0]);
-                blockedUsers.delete(userNumber);
-                console.log(`Unblocked user: ${userNumber}`);
-            }
-            const mentionedNumbers = mentioned.map(m => m.split('@')[0]).join(', ');
-            await sock.sendMessage(msg.key.remoteJid, { text: `✅ Unblocked: ${mentionedNumbers}` });
-        } else if (number) {
-            const cleanNumber = formatPhoneNumber(number);
-            blockedUsers.delete(cleanNumber);
-            console.log(`Unblocked number: ${cleanNumber}`);
-            await sock.sendMessage(msg.key.remoteJid, { text: `✅ Unblocked: ${cleanNumber}` });
-        } else {
+        const users = mentioned.length ? mentioned.map(user => user.split('@')[0]) : number ? [formatPhoneNumber(number)] : [];
+        if (!users.length) {
             await sock.sendMessage(msg.key.remoteJid, { text: '❌ Usage: unblock @user or unblock [number]' });
+            return;
         }
+        for (const user of users) blockedUsers.delete(formatPhoneNumber(user));
+        await sock.sendMessage(msg.key.remoteJid, { text: `✅ Unblocked: ${users.join(', ')}` });
     },
 
     leave: async (sock, msg) => {
@@ -69,106 +49,44 @@ export const utilityCommands = {
 
     antispam: async (sock, msg, botInfo) => {
         botInfo.antiSpam = !botInfo.antiSpam;
-        await sock.sendMessage(msg.key.remoteJid, { 
-            text: `✅ Anti-spam ${botInfo.antiSpam ? 'ENABLED' : 'DISABLED'}!\n\nDM: Warn then block\nGroup: Bot leaves silently` 
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `✅ Anti-spam ${botInfo.antiSpam ? 'ENABLED' : 'DISABLED'}!\n\nDM: Warn then block\nGroup: Bot leaves silently`
         });
-        console.log(`Anti-spam: ${botInfo.antiSpam ? 'ON' : 'OFF'}`);
     },
 
     setprefix: async (sock, msg, botInfo, sudoUsers, isFromOwner, args) => {
         const newPrefix = args[0];
-        
         if (newPrefix === undefined) {
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `❌ Please provide a prefix!\nUsage: setprefix [new_prefix]\nCurrent prefix: ${botInfo.prefix || 'None'}\n\nTo remove prefix, use: setprefix none` 
-            });
+            await sock.sendMessage(msg.key.remoteJid, { text: `❌ Usage: setprefix [new_prefix]\nCurrent prefix: ${botInfo.prefix || 'None'}` });
             return;
         }
-        
-        if (newPrefix.toLowerCase() === 'none' || newPrefix === '') {
-            botInfo.prefix = '';
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `✅ Prefix removed! Just type commands without prefix.\nExample: menu` 
-            });
-        } else {
-            botInfo.prefix = newPrefix;
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `✅ Prefix changed to: ${newPrefix}\nUse ${newPrefix}menu to see commands.` 
-            });
-        }
-        console.log(`Prefix changed to: ${botInfo.prefix || 'None'}`);
+        botInfo.prefix = newPrefix.toLowerCase() === 'none' ? '' : newPrefix;
+        await sock.sendMessage(msg.key.remoteJid, { text: `✅ Prefix changed to: ${botInfo.prefix || 'None'}` });
     },
 
     setstatus: async (sock, msg, botInfo, sudoUsers, isFromOwner, args) => {
         const status = args.join(' ');
-        
         if (!status) {
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `❌ Please provide a status!\nUsage: setstatus [your status]` 
-            });
+            await sock.sendMessage(msg.key.remoteJid, { text: '❌ Please provide a status!' });
             return;
         }
-        
         botInfo.status = status;
         await sock.updateProfileStatus(status);
         await sock.sendMessage(msg.key.remoteJid, { text: `✅ Status updated to: ${status}` });
     },
 
-    afk: async (sock, msg, botInfo, sudoUsers, isFromOwner, args) => {
-        const reason = args.join(' ');
-        
-        if (botInfo.afk.enabled) {
-            botInfo.afk.enabled = false;
-            botInfo.afk.reason = '';
-            botInfo.afk.since = null;
-            await sock.sendMessage(msg.key.remoteJid, { text: '✅ AFK mode disabled! Bot is now active.' });
-        } else {
-            botInfo.afk.enabled = true;
-            botInfo.afk.reason = reason || 'Busy right now';
-            botInfo.afk.since = new Date();
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `✅ AFK mode enabled!\n📝 Reason: ${botInfo.afk.reason}\n⏰ Time: ${botInfo.afk.since.toLocaleString()}` 
-            });
-        }
-        console.log(`AFK: ${botInfo.afk.enabled ? 'ON' : 'OFF'}`);
-    },
-
     autoread: async (sock, msg, botInfo, sudoUsers, isFromOwner, args) => {
         const subCommand = args[0]?.toLowerCase();
-        
         if (!subCommand) {
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `📖 *Auto-read Settings:*\n\nDM: ${botInfo.autoRead.dm ? 'ON' : 'OFF'}\nGroup: ${botInfo.autoRead.group ? 'ON' : 'OFF'}\n\nUsage: autoread [dm/group]` 
-            });
+            await sock.sendMessage(msg.key.remoteJid, { text: `📖 DM: ${botInfo.autoRead.dm ? 'ON' : 'OFF'}\nGroup: ${botInfo.autoRead.group ? 'ON' : 'OFF'}\n\nUsage: autoread [dm/group]` });
             return;
         }
-        
-        if (subCommand === 'dm') {
-            botInfo.autoRead.dm = !botInfo.autoRead.dm;
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `✅ Auto-read DM: ${botInfo.autoRead.dm ? 'ON' : 'OFF'}` 
-            });
-        } else if (subCommand === 'group') {
-            botInfo.autoRead.group = !botInfo.autoRead.group;
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `✅ Auto-read Group: ${botInfo.autoRead.group ? 'ON' : 'OFF'}` 
-            });
-        } else {
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: '❌ Invalid option! Use autoread dm or autoread group' 
-            });
-        }
-    },
-
-    banned: async (sock, msg, botInfo, blockedUsers, bannedUsers) => {
-        if (bannedUsers.size === 0) {
-            await sock.sendMessage(msg.key.remoteJid, { text: '📋 No banned users!' });
+        if (subCommand === 'dm') botInfo.autoRead.dm = !botInfo.autoRead.dm;
+        else if (subCommand === 'group') botInfo.autoRead.group = !botInfo.autoRead.group;
+        else {
+            await sock.sendMessage(msg.key.remoteJid, { text: '❌ Use autoread dm or autoread group' });
             return;
         }
-        
-        const bannedList = Array.from(bannedUsers).map((user, i) => `${i + 1}. ${user.split('@')[0]}`).join('\n');
-        await sock.sendMessage(msg.key.remoteJid, { 
-            text: `📋 *BANNED USERS:*\n\n${bannedList}\n\nTotal: ${bannedUsers.size} users` 
-        });
+        await sock.sendMessage(msg.key.remoteJid, { text: `✅ Auto-read ${subCommand}: ${botInfo.autoRead[subCommand] ? 'ON' : 'OFF'}` });
     }
 };
